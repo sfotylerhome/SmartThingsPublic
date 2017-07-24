@@ -3,10 +3,11 @@
  * https://community.smartthings.com/t/my-somfy-smartthings-integration/13492
  * Modified ERS 12/29/2016
  *
- * Version 1.0.6
+ * Version 1.0.7
  *
  * Version History
  *
+ * 1.0.7    26 Mar 2017		Few updates  (be sure to go into each device, select settings (gear), and hit done
  * 1.0.6    29 Dec 2016		Health Check
  * 1.0.5    01 May 2016		bug fixes
  * 1.0.4    01 May 2016		Sync commands for cases where blinds respond to multiple channels (all vs. single)
@@ -50,7 +51,9 @@
         command "OpenSync"
         command "CloseSync"
         command "TiltSync"
-        command "levelOpenClose"
+        command "levelOpenClose", [ "number" ]
+
+	attribute "lastPoll", "STRING"
 
         fingerprint deviceId: "0x1105", inClusters: "0x2C, 0x72, 0x26, 0x20, 0x25, 0x2B, 0x86"
     }
@@ -148,13 +151,18 @@ def configure() {
 }
 
 def ping() {
+	log.trace "ping called"
+	def now=new Date()
+	def tz = location.timeZone
+	def nowString = now.format("MMM/dd HH:mm",tz)
+	sendEvent("name":"lastPoll", "value":nowString, displayed: false)
 	refresh()
 }
 
 def updated() {
     log.trace "updated() called"
 
-    sendEvent(name: "checkInterval", value: 60 * 60 * 8, data: [protocol: "zwave", hubHardwareId: device.hub.hardwareID], displayed: false)
+    sendEvent(name: "checkInterval", value: 60 * 60 * 1, data: [protocol: "zwave", hubHardwareId: device.hub.hardwareID], displayed: false)
 
     def currstat = device.latestValue("level")
     def currstat1 = device.latestValue("windowShade")
@@ -189,15 +197,19 @@ def updated() {
 
 def parse(String description) {
     description
-    def result = null
+    def result = []
     def cmd = zwave.parse(description, [0x20: 1, 0x26: 1, 0x70: 1])
-    log.debug "Parsed ${description} to ${cmd}"
+    //log.debug "Parsed ${description} to ${cmd}"
     if (cmd) {
         result = zwaveEvent(cmd)
         log.debug "zwaveEvent( ${cmd} ) returned ${result.inspect()}"
     } else {
         log.debug "Non-parsed event: ${description}"
     }
+    def now=new Date()
+    def tz = location.timeZone
+    def nowString = now.format("MMM/dd HH:mm",tz)
+    result << createEvent("name":"lastPoll", "value":nowString, displayed: false)
     return result
 }
 
@@ -221,7 +233,7 @@ def zwaveEvent(physicalgraph.zwave.commands.basicv1.BasicReport cmd)
     def tempstr = ""
     def statstr = "SAME"
 
-    log.trace "Basic report cmd.value:  ${cmd.value}"
+    //log.trace "Basic report cmd.value:  ${cmd.value}"
 
     if (cmd.value == 0) {
         //result << createEvent(name: "switch", value: "off")
@@ -244,7 +256,7 @@ def zwaveEvent(physicalgraph.zwave.commands.basicv1.BasicReport cmd)
     if (cmd.value == 0 && swstatstr == "on") { statstr = "DIFFERENT" }
     if (cmd.value == 0xFF && swstatstr == "off") { statstr = "DIFFERENT" }
         
-    log.debug "${statstr} Zwave state is ${tempstr}; device stored state is ${device.latestValue('switch')} dimmer level: ${device.latestValue('level')} "
+    //log.debug "${statstr} Zwave state is ${tempstr}; device stored state is ${device.latestValue('switch')} dimmer level: ${device.latestValue('level')} "
     return result
 }
 
@@ -451,14 +463,14 @@ def setLevel(level) {
 
 def finishOpenShade() {
     sendEvent(name: "windowShade", value: "open")
-    def newlevel = 100
+    def newlevel = 99
     sendEvent(name: "level", value: newlevel)
     sendEvent(name: "switch", value: "on")
 }
 
 def finishCloseShade() {
     sendEvent(name: "windowShade", value: "closed")
-    def newlevel = 100
+    def newlevel = 0
     sendEvent(name: "level", value: newlevel)
     sendEvent(name: "switch", value: "off")
 }
